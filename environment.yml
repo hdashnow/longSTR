@@ -1,0 +1,7 @@
+name: longstr
+channels:
+- bioconda
+dependencies:
+- python=3*
+- trf
+- pysam
