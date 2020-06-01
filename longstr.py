@@ -1,5 +1,7 @@
 import argparse
 import sys
+import os
+from longstr.parse import parse_trf
 
 __author__ = "Harriet Dashnow"
 __credits__ = ["Harriet Dashnow"]
@@ -11,7 +13,7 @@ def run_trf(args):
     print(args)
 
 def run_parse(args):
-    print(args)
+    parse_trf(args.dat, args.out)
 
 def parse_args():
     # top-level parser
@@ -33,6 +35,8 @@ def parse_args():
                             help='reference genome fasta (required for cram)')
     parser_parse.add_argument('--dat', type=str,
                             help='TRF dat file (inferred from BAM name by default)')
+    parser_parse.add_argument('--out', type=str, default = '',
+                            help='output file of variants in annotated bed format')
     parser_parse.set_defaults(func=run_parse)
 
     return parser.parse_args()
