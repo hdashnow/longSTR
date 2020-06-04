@@ -3,5 +3,7 @@ channels:
 - bioconda
 dependencies:
 - python=3*
+- pytest #only requred for testing
 - trf
 - pysam
+- interlap
