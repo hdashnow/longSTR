@@ -1,7 +1,7 @@
 import argparse
 import sys
 import os
-from longstr.parse import parse_trf
+from longstr.trf import parse_trf
 
 __author__ = "Harriet Dashnow"
 __credits__ = ["Harriet Dashnow"]
@@ -13,7 +13,7 @@ def run_trf(args):
     print(args)
 
 def run_parse(args):
-    parse_trf(args.dat, args.out)
+    trf_to_genome(args.bam, args.dat, args.out)
 
 def parse_args():
     # top-level parser

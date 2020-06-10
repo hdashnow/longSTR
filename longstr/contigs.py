@@ -56,7 +56,7 @@ def get_intervals(sam):
 
              # add the interval to the contig interval tree
             contig_intervals.add((qry_start, qry_end, (ref_start, ref_end)))
-    return(contig_intervals)
+        yield (contig.query_name, contig_intervals)
 
 def main():
     cramfile = "HG00512.alt_bwamem_GRCh38DH.20150715.CHS.high_coverage.cram"

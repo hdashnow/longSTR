@@ -1,5 +1,5 @@
 from Bio.Seq import Seq
-from Bio.Alphabet import generic_dna
+#from Bio.Alphabet import generic_dna
 
 def circular_permuted(x):
     """
@@ -20,7 +20,7 @@ def self_and_rev_complement(in_dna):
     all_possible = [in_dna]
 
     # Get reverse complement
-    dna = Seq(in_dna, generic_dna)
+    dna = Seq(in_dna)#, generic_dna)
     rev_complement = str(dna.reverse_complement())
     all_possible.append(rev_complement)
     return(all_possible)

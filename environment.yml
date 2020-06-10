@@ -7,3 +7,4 @@ dependencies:
 - trf
 - pysam
 - interlap
+- biopython
