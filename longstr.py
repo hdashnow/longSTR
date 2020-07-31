@@ -1,7 +1,7 @@
 import argparse
 import sys
 import os
-from longstr.trf import parse_trf
+from trf import trf_to_genome
 
 __author__ = "Harriet Dashnow"
 __credits__ = ["Harriet Dashnow"]
@@ -43,7 +43,12 @@ def parse_args():
 
 def main():
     args = parse_args()
-    args.func(args)
+
+    try:
+        func = args.func
+    except AttributeError:
+        argparse.ArgumentParser().error("too few arguments")
+    func(args)
 
 
 if __name__ == '__main__':
