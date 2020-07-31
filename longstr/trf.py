@@ -22,19 +22,9 @@ def parse_dat(trf_file):
                 except UnboundLocalError: # on first line, since not yet populated
                     pass
 
-                contig_id = line.strip('@').strip()
+                contig_id = line.strip('@').strip().split()[0]
                 variants = []
                 # set new variant
-                splitlocus = contig_id.split(':')
-                chrom = splitlocus[0]
-                try:
-                    splitlocus2 = splitlocus[1].split('/')
-                    splitlocus3 = splitlocus2[0].split('-')
-                    contig_start = int(splitlocus3[0])
-                    contig_end = splitlocus3[1]
-                except IndexError:
-                    contig_start = 0
-                    contig_end = 0
             else:
                 splitline = line.split()
                 start = int(splitline[0])
@@ -45,7 +35,7 @@ def parse_dat(trf_file):
                 repeatunit = normalise_str(splitline[13])
                 length_bp = end - start + 1
 
-                variant = {'chrom': chrom, 'start': start, 'end': end,
+                variant = {'start': start, 'end': end,
                             'repeatunit': repeatunit, 'period': period,
                             'length_ru': length_ru, 'length_bp': length_bp}
                 variants.append(variant)
