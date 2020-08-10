@@ -3,12 +3,30 @@
 # Each @ is a contig labeled with it's mapping position,
 # each line is an STR
 
+import argparse
 import os
 import sys
 from strtools import normalise_str
 from contigs import get_intervals
 import itertools
 import pysam
+import statistics as stats
+
+def parse_args():
+    # top-level parser
+    parser = argparse.ArgumentParser()
+
+    # subcommands
+    parser.add_argument('BAM', type=str,
+                        help='bam or cram file')
+    #parser.add_argument('--fasta', type=str,
+    #                    help='reference genome fasta (required for cram)')
+    parser.add_argument('--dat', type=str,
+                        help='TRF dat file')
+    parser.add_argument('--out', type=str, default = '',
+                        help='output file of variants in annotated bed format')
+
+    return parser.parse_args()
 
 def parse_dat(trf_file):
     with open(trf_file) as trf_dat:
@@ -55,13 +73,25 @@ def get_ref_pos(pos, intervals):
             all_results.append(result_ref[0])
         # Result is a range so need to calculate position in range
         else:
-            assert result_ref[1] - result_ref[0] == result_contig[1] - result_contig[0]
+            # If both ranges have a non-zero lenth, check the are equal
+            if result_contig[0] != result_contig[1]:
+                try:
+                    assert result_ref[1] - result_ref[0] == result_contig[1] - result_contig[0]
+                except AssertionError:
+                    sys.stderr.write('WARNING, inconsistent range lengths:\n')
+                    sys.stderr.write(f'result_ref {result_ref} len: {result_ref[1] - result_ref[0]}\n')
+                    sys.stderr.write(f'result_contig {result_contig} len: {result_contig[1] - result_contig[0]}\n')
+                    sys.stderr.write(f'result would be {result_ref[0] + pos - result_contig[0]}\n')
+                    assert False
             all_results.append(result_ref[0] + pos - result_contig[0])
     # Check all results are equal
     if len(set(all_results)) == 1:
         return all_results[0]
     else:
-        sys.exit('Inconsistent results for position, error?')
+        try:
+            return stats.mode(all_results)
+        except stats.StatisticsError:
+            return round(stats.mean(all_results))
 
 header = '\t'.join([
             '#chrom',
@@ -100,21 +130,46 @@ def trf_to_genome(alignfile, trf_file, outfilename = ''):
     else:
         sys.exit(f'File extension {aligntype} is not a recognized alignment format. Use .sam, .bam or .cram')
 
+    # Iterate through both at once, assuming both files contain the same contigs,
+    # in the same order, however the variants may be missing some contigs.
     contig_data = get_intervals(sam)
-    variant_data = parse_dat(trf_file)
-    # Iterate through both at once
-    for contig_tuple, variant_tuple in itertools.zip_longest(contig_data,
-                                        variant_data, fillvalue=None):
-        if contig_tuple == None or variant_tuple == None:
-            sys.exit('Contigs differ between bam and trf dat file. Check same was used for both')
-        if contig_tuple[0] != variant_tuple[0]:
-            sys.exit('ID mismatch: {contig_tuple[0]}, {variant_tuple[0]}')
-        for interval in contig_tuple[1]:
-            contig_intervals = contig_tuple[1]
+    try:
+        contig_tuple = next(contig_data)
+    except StopIteration:
+        exit('Error: {alignfile} empty?')
+    for variant_tuple in parse_dat(trf_file):
+        while contig_tuple[0] != variant_tuple[0]:
+            # wrap in try/except block to deal with file ending
+            try:
+                contig_tuple = next(contig_data)
+            except StopIteration:
+                exit(f'ERROR: The file {trf_file} contains a contig {variant_tuple[0]} that is not present in {alignfile}')
+
+        # Skip variants on unmapped contigs
+        if contig_tuple[1]['chrom'] == None:
+            continue
+        chrom = contig_tuple[1]['chrom']
+        ref_start = contig_tuple[1]['start']
+        for interval in contig_tuple[2]:
+            contig_intervals = contig_tuple[2] #XXX Does this line make sense?
         for variant in variant_tuple[1]:
-            variant['ref_start'] = get_ref_pos(variant['start'], contig_intervals)
-            variant['ref_end'] = get_ref_pos(variant['end'], contig_intervals)
+            variant['chrom'] = chrom
+            try:
+                variant['ref_start'] = get_ref_pos(variant['start'], contig_intervals) + ref_start
+                variant['ref_end'] = get_ref_pos(variant['end'], contig_intervals) + ref_start
+            except AssertionError:
+                sys.stderr.write(f'{contig_tuple[0]} {chrom}:{ref_start}\n')
+                for interval in contig_intervals:
+                    sys.stderr.write(f'{interval}\n')
+                sys.exit()
             variant['indel'] = (variant['start'] - variant['end']) - (variant['ref_start'] - variant['ref_end'])
             if outfilename != '':
                 write_variant(outfile, variant)
 
+def main():
+    args = parse_args()
+
+    trf_to_genome(args.BAM, args.dat, args.out)
+
+if __name__ == '__main__':
+    main()
