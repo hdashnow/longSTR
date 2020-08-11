@@ -30,6 +30,8 @@ def normalise_str(in_dna):
     And return the first alphabetically.
     For example, TA = AT. But would return AT.
     """
+    if in_dna == None or len(in_dna) == 0:
+        return ''
     all_possible = []
     # Circularly permute original sequence and reverse complement
     for seq in self_and_rev_complement(in_dna):
