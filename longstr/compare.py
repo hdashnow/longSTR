@@ -8,7 +8,6 @@ import sys
 import os
 from strtools import normalise_str
 import pandas as pd
-#import numpy as np
 import pyranges as pr
 
 def parse_args():
@@ -53,29 +52,52 @@ def parse_bed(filename):
 
     return(df)
 
+def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, hap, slop=100):
+    """Filter to a specific repeat unit then annotate with the closest locus"""
+    strling_df = strling_df.loc[strling_df['repeatunit_norm'] == this_repeatunit].copy()
+
+    if strling_df.empty:
+        return strling_df
+
+    for i, trf_df in zip((1,2), (trf_hap1_df, trf_hap2_df)):
+
+        trf_df = trf_df[trf_df['repeatunit_norm'] == this_repeatunit]
+        if trf_df.empty:
+            continue #XXX May need to add extra columns?
+    
+        strling_pr = pr.PyRanges(strling_df)
+        trf_pr = pr.PyRanges(trf_df)
+    
+        # Annotate with the closest locus
+        nearest_pr = strling_pr.nearest(trf_pr)
+        nearest_df = nearest_pr.df
+    
+        # Remove pacbio variants more than slop bp away
+        nearest_columns = ['Start_b', 'End_b', 'repeatunit_b', 'period', 'length_ru', 'length_bp', 'indel', 'sample_b', 'Distance']
+        nearest_df.loc[nearest_df.Distance > slop, nearest_columns] = None
+
+        strling_df[f'repeatunit_hap{i}'] = nearest_df['repeatunit_b']
+        strling_df[f'indel_hap{i}'] = nearest_df['indel']
+        strling_df[f'Distance_hap{i}'] = nearest_df['Distance']
+
+    return strling_df
+
 def match_variants(strling_df, trf_hap1_df, trf_hap2_df, slop=100):
     """Match up pacbio trf variants to their corresponding strling variants
         - Within X bp of slop
         - Same repeat unit
         Any leftover pacbio trf variants added on to the end"""
-    strling_pr = pr.PyRanges(strling_df)
-    trf_pr = pr.PyRanges(trf_hap1_df)
 
-    # Note, this will annotate with the closest physical locus
-    # Could break down by repeat unit first then do this?
-    nearest_pr = strling_pr.nearest(trf_pr)
-    #nearest_pr.to_csv('tmp.tsv', sep='\t')
-    nearest_df = nearest_pr.df
+    strling_df['repeatunit_norm'] = strling_df['repeatunit'].apply(normalise_str)
+    trf_hap1_df['repeatunit_norm'] = trf_hap1_df['repeatunit'].apply(normalise_str)
+    trf_hap2_df['repeatunit_norm'] = trf_hap2_df['repeatunit'].apply(normalise_str)
 
-    # Remove pacbio variants more than slop bp away
-    nearest_columns = ['Start_b', 'End_b', 'repeatunit_b', 'period', 'length_ru', 'length_bp', 'indel', 'sample_b', 'Distance']
-    nearest_df.loc[nearest_df.Distance > slop, nearest_columns] = None #np.nan
-    #nearest_df.to_csv('tmp2.tsv', sep='\t')
-
-    # Remove pacbio variants with a different repeat unit
-    diff_ru = nearest_df['repeatunit'].apply(normalise_str) != nearest_df['repeatunit_b'].apply(normalise_str)
-    nearest_df.loc[diff_ru, nearest_columns] = None #np.nan
-    nearest_df.to_csv('tmp2.tsv', sep='\t')
+    # Break down by repeat unit before comparing
+    all_closest_df = pd.DataFrame()
+    for this_ru in set(strling_df['repeatunit_norm']):
+        all_closest_df = all_closest_df.append(match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_ru, hap=1, slop=100))
+    
+    return all_closest_df
 
 def annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr):
     """Annotate strling calls with contig coverage overlap"""
@@ -85,7 +107,7 @@ def annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr):
         cov_pr = strling_pr.coverage(hap_pr)
         cov_df = cov_pr.df
         # If FractionOverlaps < 1, set NumberOverlaps to 0 
-        cov_df['NumberOverlaps'][cov_df.FractionOverlaps < 1] = 0
+        cov_df.loc[cov_df.FractionOverlaps < 1, 'NumberOverlaps'] = 0
         strling_df[f'Hap{i}Cov'] = cov_df['NumberOverlaps']
 
     return(strling_df)
@@ -101,20 +123,18 @@ def main():
     strling_df = parse_bed(args.strling)
 
     trf_hap1_df = parse_bed(args.trf[0])
-#    trf_hap1_pr = pr.PyRanges(trf_hap1_df)
-
     trf_hap2_df = parse_bed(args.trf[1])
-#    trf_hap2_pr = pr.PyRanges(trf_hap2_df)
 
     cov_hap1_pr = pr.read_bed(args.cov[0])
     cov_hap2_pr = pr.read_bed(args.cov[1])
 
     # Annotate strling calls with corresponding PacBio calls
-    match_variants(strling_df, trf_hap1_df, trf_hap2_df)
-    # Annotate strling calls with coverage overlap
-    #strling_df = annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr)
+    strling_df = match_variants(strling_df, trf_hap1_df, trf_hap2_df)
 
-    #print(strling_df)
+    # Annotate strling calls with coverage overlap
+    strling_df = annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr)
+
+    strling_df.to_csv(args.out, sep='\t', index=False)
 
 if __name__ == '__main__':
     main()
