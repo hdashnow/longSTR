@@ -20,6 +20,8 @@ def parse_args():
                         help='STR variants from TRF in bed format (two, one for each haplotype)')
     parser.add_argument('--cov', type=str, nargs='+',
                         help='Contig coverage in bed format (two, one for each haplotype)')
+    parser.add_argument('--slop', type=int, default=200,
+                        help='Consider variants the same if they are this distance apart (and have the same repeat unit)')
     parser.add_argument('--out', type=str, default = '',
                         help='output file of variants in annotated bed format')
 
@@ -52,7 +54,7 @@ def parse_bed(filename):
 
     return(df)
 
-def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, hap, slop=100):
+def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, slop=200):
     """Filter to a specific repeat unit then annotate with the closest locus"""
     strling_df = strling_df.loc[strling_df['repeatunit_norm'] == this_repeatunit].copy()
 
@@ -71,7 +73,10 @@ def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, hap, sl
         # Annotate with the closest locus
         nearest_pr = strling_pr.nearest(trf_pr)
         nearest_df = nearest_pr.df
-    
+
+        if nearest_df.empty:
+            continue
+
         # Remove pacbio variants more than slop bp away
         nearest_columns = ['Start_b', 'End_b', 'repeatunit_b', 'period', 'length_ru', 'length_bp', 'indel', 'sample_b', 'Distance']
         nearest_df.loc[nearest_df.Distance > slop, nearest_columns] = None
@@ -82,7 +87,7 @@ def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, hap, sl
 
     return strling_df
 
-def match_variants(strling_df, trf_hap1_df, trf_hap2_df, slop=100):
+def match_variants(strling_df, trf_hap1_df, trf_hap2_df, slop):
     """Match up pacbio trf variants to their corresponding strling variants
         - Within X bp of slop
         - Same repeat unit
@@ -95,7 +100,7 @@ def match_variants(strling_df, trf_hap1_df, trf_hap2_df, slop=100):
     # Break down by repeat unit before comparing
     all_closest_df = pd.DataFrame()
     for this_ru in set(strling_df['repeatunit_norm']):
-        all_closest_df = all_closest_df.append(match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_ru, hap=1, slop=100))
+        all_closest_df = all_closest_df.append(match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_ru, slop))
     
     return all_closest_df
 
@@ -129,7 +134,7 @@ def main():
     cov_hap2_pr = pr.read_bed(args.cov[1])
 
     # Annotate strling calls with corresponding PacBio calls
-    strling_df = match_variants(strling_df, trf_hap1_df, trf_hap2_df)
+    strling_df = match_variants(strling_df, trf_hap1_df, trf_hap2_df, args.slop)
 
     # Annotate strling calls with coverage overlap
     strling_df = annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr)
