@@ -34,15 +34,28 @@ def consumes_reference(cigartuple):
 def get_intervals(sam):
     """Add all intervals from all contigs to an interval tree"""
 
+    previous_contig = None
+    chrom = None
+    reference_start = None
+    contig_intervals = InterLap()
+
     for contig in sam.fetch():
-        if contig.is_secondary or contig.is_supplementary: #XXX deal with supps?
+        if contig.is_secondary:
             continue
         if contig.is_unmapped:
             yield (contig.query_name,
                 {'chrom': None, 'start': None},
                 None)
             continue
-        contig_intervals = InterLap()
+
+        # yield previous contig if name has changed
+        if contig.query_name != previous_contig and previous_contig != None:
+            yield (previous_contig,
+                {'chrom': chrom, 'start': reference_start}, # should be previous_chrom etc.?
+                contig_intervals)
+            contig_intervals = InterLap()
+
+        reference_start = contig.reference_start
         qry_pos = 0
         chrom = contig.reference_name
         ref_pos = contig.reference_start
@@ -64,9 +77,14 @@ def get_intervals(sam):
 
              # add the interval to the contig interval tree
             contig_intervals.add((qry_start, qry_end, (ref_start, ref_end)))
-        yield (contig.query_name,
-                {'chrom': chrom, 'start':contig.reference_start},
-                contig_intervals)
+
+        # Update previous
+        previous_contig = contig.query_name
+
+    # yield final contig
+    yield (previous_contig,
+            {'chrom': chrom, 'start':contig.reference_start},
+            contig_intervals)
 
 def main():
     cramfile = "HG00512.alt_bwamem_GRCh38DH.20150715.CHS.high_coverage.cram"
