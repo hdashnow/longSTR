@@ -1,0 +1,2 @@
+#chrom  left    right   repeatunit  allele1_est allele2_est anchored_reads  spanning_reads  spanning_pairs  expected_spanning_pairs spanning_pairs_pctl left_clips  right_clips unplaced_pairs  depth   sum_str_counts
+chrX    148500701   148500702   CCG 0.00    34.62   8   34  95  107.20  0.88    0   1   0   38.0    287
