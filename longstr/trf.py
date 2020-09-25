@@ -7,7 +7,7 @@ import argparse
 import os
 import sys
 from strtools import normalise_str
-from contigs import get_intervals
+from contigs import Contig2Reference
 import itertools
 import pysam
 import statistics as stats
@@ -112,7 +112,7 @@ def write_variant(outfile, variant):
         )
    )
 
-def trf_to_genome(alignfile, trf_file, outfilename = ''):
+def trf_to_genome(samfile, trf_file, outfilename = ''):
     """Read in trf calls on contigs and the corresponding alignments and use these
     to transfer the calls from contig coordinates to reference genome coordinates.
     """
@@ -120,48 +120,26 @@ def trf_to_genome(alignfile, trf_file, outfilename = ''):
         outfile = open(outfilename, 'w')
         outfile.write(header)
 
-    aligntype = os.path.splitext(alignfile)[1]
-    if aligntype == '.sam':
-        sam = pysam.AlignmentFile(alignfile, "r")
-    elif aligntype == '.bam':
-        sam = pysam.AlignmentFile(alignfile, "rb")
-    elif aligntype == '.cram':
-        sam = pysam.AlignmentFile(alignfile, "rc")
-    else:
-        sys.exit(f'File extension {aligntype} is not a recognized alignment format. Use .sam, .bam or .cram')
+    contig2ref = Contig2Reference(samfile)
 
-    # Iterate through both at once, assuming both files contain the same contigs,
-    # in the same order, however the variants may be missing some contigs.
-    contig_data = get_intervals(sam)
-    try:
-        contig_tuple = next(contig_data)
-    except StopIteration:
-        exit('Error: {alignfile} empty?')
-    for variant_tuple in parse_dat(trf_file):
-        while contig_tuple[0] != variant_tuple[0]:
-            # wrap in try/except block to deal with file ending
-            try:
-                contig_tuple = next(contig_data)
-            except StopIteration:
-                exit(f'ERROR: The file {trf_file} contains a contig {variant_tuple[0]} that is not present in {alignfile}')
+    for contigID, variants in parse_dat(trf_file):
 
         # Skip variants on unmapped contigs
-        if contig_tuple[1]['chrom'] == None:
-            continue
-        chrom = contig_tuple[1]['chrom']
-        ref_start = contig_tuple[1]['start']
-        for interval in contig_tuple[2]:
-            contig_intervals = contig_tuple[2] #XXX Does this line make sense?
-        for variant in variant_tuple[1]:
-            variant['chrom'] = chrom
-            try:
-                variant['ref_start'] = get_ref_pos(variant['start'], contig_intervals) + ref_start
-                variant['ref_end'] = get_ref_pos(variant['end'], contig_intervals) + ref_start
-            except AssertionError:
-                sys.stderr.write(f'{contig_tuple[0]} {chrom}:{ref_start}\n')
-                for interval in contig_intervals:
-                    sys.stderr.write(f'{interval}\n')
-                sys.exit()
+        #if contig_tuple[1]['chrom'] == None:
+        #    continue
+        #chrom = contig_tuple[1]['chrom']
+        #ref_start = contig_tuple[1]['start']
+        #for interval in contig_tuple[2]:
+        #    contig_intervals = contig_tuple[2] #XXX Does this line make sense?
+        for variant in variants:
+            for i, mapping in enumerate(contig2ref.translate(contigID, variant['start'])):
+                chrom_start, variant['ref_start'] = mapping
+                assert i == 0
+            for i, mapping in enumerate(contig2ref.translate(contigID, variant['end'])):
+                chrom_end, variant['ref_end'] = mapping
+                assert i == 0
+            assert chrom_start == chrom_end
+            variant['chrom'] = chrom_start
             variant['indel'] = (variant['start'] - variant['end']) - (variant['ref_start'] - variant['ref_end'])
             if outfilename != '':
                 write_variant(outfile, variant)

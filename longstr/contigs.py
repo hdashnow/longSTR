@@ -1,11 +1,8 @@
-# Iterate over contigs in a bam file and calculate what base in the
-# reference each base on the contig corresponds to
-
+import os
+import collections
 import pysam
 from interlap import InterLap
 
-# https://pysam.readthedocs.io/en/latest/api.html#pysam.AlignedSegment.cigartuples
-# https://samtools.github.io/hts-specs/SAMv1.pdf
 #               consumes_qry    consumes_ref
 MATCH  = 0  # M yes             yes
 INS    = 1  # I yes             no
@@ -19,86 +16,65 @@ DIFF   = 8  # X yes             yes
 
 def consumes_query(cigartuple):
     """If cigar operation consumes query return True, else return False"""
-    if cigartuple[0] in [MATCH, INS, SOFT, EQUAL, DIFF]:
-        return True
-    else:
-        return False
+    return cigartuple[0] in [MATCH, INS, SOFT, EQUAL, DIFF]
 
 def consumes_reference(cigartuple):
     """If cigar operation consumes reference return True, else return False"""
-    if cigartuple[0] in [MATCH, DEL, SKIP, EQUAL, DIFF]:
-        return True
-    else:
-        return False
+    return cigartuple[0] in [MATCH, DEL, SKIP, EQUAL, DIFF]
 
-def get_intervals(sam):
-    """Add all intervals from all contigs to an interval tree"""
 
-    previous_contig = None
-    chrom = None
-    reference_start = None
-    contig_intervals = InterLap()
+class Contig2Reference(object):
+    def __init__(self, sam, reference=None):
+        self.inter = collections.defaultdict(InterLap)
+        self.add_sam(sam)
+        self.reference = reference
 
-    for contig in sam.fetch():
-        if contig.is_secondary:
-            continue
-        if contig.is_unmapped:
-            yield (contig.query_name,
-                {'chrom': None, 'start': None},
-                None)
-            continue
+    def add_sam(self, samfile):
 
-        # yield previous contig if name has changed
-        if contig.query_name != previous_contig and previous_contig != None:
-            yield (previous_contig,
-                {'chrom': chrom, 'start': reference_start}, # should be previous_chrom etc.?
-                contig_intervals)
-            contig_intervals = InterLap()
+        aligntype = os.path.splitext(samfile)[1]
+        if aligntype == '.sam':
+            sam = pysam.AlignmentFile(samfile, "r")
+        elif aligntype == '.bam':
+            sam = pysam.AlignmentFile(samfile, "rb")
+        elif aligntype == '.cram':
+            sam = pysam.AlignmentFile(samfile, "rc")
+        else:
+            sys.exit(f'File extension {aligntype} is not a recognized alignment format. Use .sam, .bam or .cram')
 
-        reference_start = contig.reference_start
-        qry_pos = 0
-        chrom = contig.reference_name
-        ref_pos = contig.reference_start
+        for aln in sam:
+            if aln.is_secondary or aln.is_unmapped or aln.mapping_quality < 40: continue 
+            if aln.is_supplementary: continue # NOTE: not sure we shoulds skip these ?
 
-        for cigartuple in contig.cigartuples:
-            # current interval's query and ref start coords
-            qry_start = qry_pos
-            qry_end = qry_pos
-            ref_start = ref_pos
-            ref_end = ref_pos
 
-            op_len = cigartuple[1]
-            if consumes_query(cigartuple):
-                qry_pos += op_len
-                qry_end += op_len
-            if consumes_reference(cigartuple):
-                ref_pos += op_len
-                ref_end += op_len
+            I = self.inter[aln.query_name]
+            ref_name = aln.reference_name
 
-             # add the interval to the contig interval tree
-            contig_intervals.add((qry_start, qry_end, (ref_start, ref_end)))
+            aln_off = 0
+            ref_off = aln.reference_start
+            for c in aln.cigartuples:
+                op_len = c[1]
+                cons_q = consumes_query(c)
+                cons_r = consumes_reference(c)
 
-        # Update previous
-        previous_contig = contig.query_name
+                I.add((aln_off, aln_off + op_len * int(cons_q), (ref_name, ref_off, ref_off + op_len * int(cons_r))))
 
-    # yield final contig
-    yield (previous_contig,
-            {'chrom': chrom, 'start':contig.reference_start},
-            contig_intervals)
+                aln_off += int(cons_q) * op_len
+                ref_off += int(cons_r) * op_len
 
-def main():
-    cramfile = "HG00512.alt_bwamem_GRCh38DH.20150715.CHS.high_coverage.cram"
-    samfile = "/uufs/chpc.utah.edu/common/HIPAA/u6026198/storage/git/STRling/working/chaisson_2019/data/HG00733.h0.chr1-1436179-1516179.sam"
-    ref_fasta = ""
-    trf_dat = "/uufs/chpc.utah.edu/common/HIPAA/u6026198/storage/git/STRling/working/chaisson_2019/data/HG00733.h0.chr1-1436179-1516179.fasta.trf.dat"
+    def translate(self, read_name, pos):
+        """translate a contig coordinate to a genomic coordinate. since there could be many mappings this
+        is an iterator."""
+        for (start, stop, (ref_chrom, ref_start, ref_stop)) in self.inter[read_name].find((pos, pos)):
+            over = pos - start # how far past start
+            assert stop > pos
+            yield (ref_chrom, ref_start + over)
 
-    #sam = pysam.AlignmentFile(cramfile, "rc", )
-    sam = pysam.AlignmentFile(samfile, "r")
-
-    contig_intervals = get_intervals(sam)
-
-    for i in contig_intervals:
-        print(i)
 
 if __name__ == "__main__":
-    main()
+    import sys
+    c2r = Contig2Reference(sys.argv[1])
+
+    for mapping in c2r.translate("000093F", 6862262):
+        print("start:", mapping)
+    for mapping in c2r.translate("000093F", 6862455):
+        print("stop:", mapping)
