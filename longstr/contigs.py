@@ -22,6 +22,8 @@ def consumes_reference(cigartuple):
     """If cigar operation consumes reference return True, else return False"""
     return cigartuple[0] in [MATCH, DEL, SKIP, EQUAL, DIFF]
 
+def by_supp(a):
+    return a[2]["supp"]
 
 class Contig2Reference(object):
     def __init__(self, sam, reference=None):
@@ -43,7 +45,7 @@ class Contig2Reference(object):
 
         for aln in sam:
             if aln.is_secondary or aln.is_unmapped or aln.mapping_quality < 40: continue 
-            if aln.is_supplementary: continue # NOTE: not sure we shoulds skip these ?
+            #if aln.is_supplementary: continue # NOTE: not sure we shoulds skip these ?
 
 
             I = self.inter[aln.query_name]
@@ -56,23 +58,24 @@ class Contig2Reference(object):
                 cons_q = consumes_query(c)
                 cons_r = consumes_reference(c)
 
-                I.add((aln_off, aln_off + op_len * int(cons_q), (ref_name, ref_off, ref_off + op_len * int(cons_r))))
+                I.add((aln_off, aln_off + op_len * int(cons_q),
+                    dict(chrom=ref_name, start=ref_off, stop=ref_off + op_len *
+                        int(cons_r), supp=aln.is_supplementary)))
 
                 aln_off += int(cons_q) * op_len
                 ref_off += int(cons_r) * op_len
 
+
+
     def translate(self, read_name, pos):
         """translate a contig coordinate to a genomic coordinate. since there
         could be many mappings this is an iterator."""
-        for (start, stop, (ref_chrom, ref_start, ref_stop)) in self.inter[read_name].find((pos, pos)):
+        results = [(start, stop, ref) for (start, stop, ref) in self.inter[read_name].find((pos, pos))]
+        results.sort(key=by_supp)
+        for start, stop, ref in results:
             over = pos - start # how far past start
             #assert stop >= pos
-            if stop < pos:
-                print('read: ', read)
-                print('stop: ', stop)
-                print('pos: ', pos)
-                sys.exit()
-            yield (ref_chrom, ref_start + over)
+            yield (ref['chrom'], ref['start'] + over, ref['supp'])
 
 
 if __name__ == "__main__":
