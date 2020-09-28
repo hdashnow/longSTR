@@ -62,11 +62,16 @@ class Contig2Reference(object):
                 ref_off += int(cons_r) * op_len
 
     def translate(self, read_name, pos):
-        """translate a contig coordinate to a genomic coordinate. since there could be many mappings this
-        is an iterator."""
+        """translate a contig coordinate to a genomic coordinate. since there
+        could be many mappings this is an iterator."""
         for (start, stop, (ref_chrom, ref_start, ref_stop)) in self.inter[read_name].find((pos, pos)):
             over = pos - start # how far past start
-            assert stop > pos
+            #assert stop >= pos
+            if stop < pos:
+                print('read: ', read)
+                print('stop: ', stop)
+                print('pos: ', pos)
+                sys.exit()
             yield (ref_chrom, ref_start + over)
 
 

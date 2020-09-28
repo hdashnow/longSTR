@@ -20,7 +20,7 @@ def parse_args():
                         help='STR variants from TRF in bed format (two, one for each haplotype)')
     parser.add_argument('--cov', type=str, nargs='+',
                         help='Contig coverage in bed format (two, one for each haplotype)')
-    parser.add_argument('--slop', type=int, default=200,
+    parser.add_argument('--slop', type=int, default=500,
                         help='Consider variants the same if they are this distance apart (and have the same repeat unit)')
     parser.add_argument('--out', type=str, default = '',
                         help='output file of variants in annotated bed format')
