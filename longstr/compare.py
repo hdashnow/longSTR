@@ -78,12 +78,23 @@ def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, slop=20
             continue
 
         # Remove pacbio variants more than slop bp away
-        nearest_columns = ['Start_b', 'End_b', 'repeatunit_b', 'period', 'length_ru', 'length_bp', 'indel', 'sample_b', 'Distance']
+        nearest_columns = ['Start_b', 'End_b', 'repeatunit_norm_b', 'period', 'length_ru', 'length_bp', 'indel', 'sample_b', 'Distance']
         nearest_df.loc[nearest_df.Distance > slop, nearest_columns] = None
 
-        strling_df[f'repeatunit_hap{i}'] = nearest_df['repeatunit_b']
-        strling_df[f'indel_hap{i}'] = nearest_df['indel']
-        strling_df[f'Distance_hap{i}'] = nearest_df['Distance']
+        # Create a unique index
+        strling_df['locus'] = strling_df['Chromosome'] + '-' + strling_df['Start'].astype(str
+            ) + '-' + strling_df['End'].astype(str) + '-' + strling_df['repeatunit']
+        strling_df.set_index('locus', inplace = True)
+        nearest_df['locus'] = nearest_df['Chromosome'].astype(str) + '-' + nearest_df['Start'
+            ].astype(str) + '-' + nearest_df['End'].astype(str) + '-' + nearest_df['repeatunit']
+        nearest_df.set_index('locus', inplace = True)
+
+        nearest_df = nearest_df.filter(['repeatunit_norm_b', 'indel', 'Distance'])
+        nearest_df.rename(columns={'repeatunit_norm_b': f'repeatunit_hap{i}',
+                                    'indel': f'indel_hap{i}',
+                                    'Distance': f'Distance_hap{i}'}, inplace = True)
+        strling_df = strling_df.merge(nearest_df, how = 'left', left_index = True,
+                                        right_index = True)
 
     return strling_df
 
