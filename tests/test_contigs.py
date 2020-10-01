@@ -16,10 +16,13 @@ def test_translate():
     c2r = Contig2Reference(sam)
     for mapping in c2r.translate("000093F", 6862262):
         print("start:", mapping)
-        assert mapping == ('chrX', 148500605)
+        assert mapping == ('chrX', 148500605, False)
+        break
+    print()
     for mapping in c2r.translate("000093F", 6862455):
         print("stop:", mapping)
-        assert mapping == ('chrX', 148500753)
+        assert mapping == ('chrX', 148500753, False)
+        break
 
 #def test_time_Contig2Reference():
 #    import time

@@ -18,17 +18,5 @@ def test_parse_dat():
         for variant in variants:
             print(variant)
 
-@pytest.mark.parametrize("pos, expected", [
-    (25, 1024),
-    (55, 1049),
-    (50, 1049),
-    (150, None),
-])
-def test_get_ref_pos(pos, expected):
-    intervals = InterLap()    
-    intervals.add( (0, 50, (999, 1049)) )
-    intervals.add( (50, 100, (1049, 1049)) )
-    assert get_ref_pos(pos, intervals) == expected
-
 def test_trf_to_genome():
     trf_to_genome('test.sam', 'test.trf.dat', 'test_output.txt')
