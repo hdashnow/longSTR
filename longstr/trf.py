@@ -113,24 +113,9 @@ def write_variant(outfile, variant):
    )
 
 def get_ref_pos(contigID, position, contig2ref):
-    chrom_matches = []
-    pos_matches = []
     for i, mapping in enumerate(contig2ref.translate(contigID, position)):
-        chrom_matches.append(mapping[0])
-        pos_matches.append(mapping[1])
-    if len(chrom_matches) == 0:
-        return (None, None)
-    # Check all results are equal and if not chose one
-    assert len(set(chrom_matches)) == 1
-    #    print(chrom_matches)
-    #    print(pos_matches)
-    if len(set(pos_matches)) == 1:
-        return (chrom_matches[0], pos_matches[0])
-    else:
-        try:
-            return (chrom_matches[0], stats.mode(pos_matches))
-        except stats.StatisticsError:
-            return (chrom_matches[0], round(stats.mean(pos_matches)))
+        return (mapping[0], mapping[1]) # (chrom, position)
+    return (None, None)
 
 def trf_to_genome(samfile, trf_file, outfilename = ''):
     """Read in trf calls on contigs and the corresponding alignments and use these
@@ -149,10 +134,14 @@ def trf_to_genome(samfile, trf_file, outfilename = ''):
             chrom_end, variant['ref_end'] = get_ref_pos(contigID, variant['end'], contig2ref)
             if chrom_start == None or chrom_start == None: # Skip variants with no match in the sam
                 continue
-            assert chrom_start == chrom_end
-            #if chrom_start != chrom_end:
-            #    print(variant)
+            if chrom_start != chrom_end:
+                continue
             variant['chrom'] = chrom_start
+            # If end is before start in reference, swap them
+            if variant['ref_start'] > variant['ref_end']:
+                ref_start = variant['ref_end']
+                variant['ref_end'] = variant['ref_start']
+                variant['ref_start'] = ref_start
             variant['indel'] = (variant['start'] - variant['end']) - (variant['ref_start'] - variant['ref_end'])
             if outfilename != '':
                 write_variant(outfile, variant)
