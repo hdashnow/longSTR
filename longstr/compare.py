@@ -122,9 +122,19 @@ def annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr):
     for i, hap_pr in zip((1,2), (cov_hap1_pr, cov_hap2_pr)):
         cov_pr = strling_pr.coverage(hap_pr)
         cov_df = cov_pr.df
+
         # If FractionOverlaps < 1, set NumberOverlaps to 0 
         cov_df.loc[cov_df.FractionOverlaps < 1, 'NumberOverlaps'] = 0
-        strling_df[f'Hap{i}Cov'] = cov_df['NumberOverlaps']
+
+       # Create a unique index
+        cov_df['locus'] = cov_df['Chromosome'].astype(str) + '-' + cov_df['Start'
+            ].astype(str) + '-' + cov_df['End'].astype(str) + '-' + cov_df['repeatunit']
+        cov_df.set_index('locus', inplace = True)
+
+        cov_df = cov_df.filter(['NumberOverlaps'])
+        cov_df.rename(columns={'NumberOverlaps': f'Hap{i}Cov'}, inplace = True)
+        strling_df = strling_df.merge(cov_df, how = 'left', left_index = True,
+                                        right_index = True)
 
     return(strling_df)
 
