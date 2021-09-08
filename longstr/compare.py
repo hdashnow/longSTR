@@ -15,11 +15,11 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--strling', type=str,
-                        help='STRling variants')
-    parser.add_argument('--trf', type=str, nargs='+',
-                        help='STR variants from TRF in bed format (two, one for each haplotype)')
-    parser.add_argument('--cov', type=str, nargs='+',
-                        help='Contig coverage in bed format (two, one for each haplotype)')
+                        help='STRling outlier tsv file')
+    parser.add_argument('--trf', type=str,
+                        help='STR variants from TRF in bed format')
+    parser.add_argument('--cov', type=str,
+                        help='Contig coverage in bed format')
     parser.add_argument('--slop', type=int, default=500,
                         help='Consider variants the same if they are this distance apart (and have the same repeat unit)')
     parser.add_argument('--out', type=str, default = '',
@@ -54,51 +54,49 @@ def parse_bed(filename):
 
     return(df)
 
-def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, slop=200):
+def match_closest(strling_df, trf_df, this_repeatunit, slop=200):
     """Filter to a specific repeat unit then annotate with the closest locus"""
     strling_df = strling_df.loc[strling_df['repeatunit_norm'] == this_repeatunit].copy()
 
     if strling_df.empty:
         return strling_df
 
-    for i, trf_df in zip((1,2), (trf_hap1_df, trf_hap2_df)):
+    trf_df = trf_df[trf_df['repeatunit_norm'] == this_repeatunit]
+    if trf_df.empty:
+        return #XXX May need to add extra columns?
 
-        trf_df = trf_df[trf_df['repeatunit_norm'] == this_repeatunit]
-        if trf_df.empty:
-            continue #XXX May need to add extra columns?
-    
-        strling_pr = pr.PyRanges(strling_df)
-        trf_pr = pr.PyRanges(trf_df)
-    
-        # Annotate with the closest locus
-        nearest_pr = strling_pr.nearest(trf_pr)
-        nearest_df = nearest_pr.df
+    strling_pr = pr.PyRanges(strling_df)
+    trf_pr = pr.PyRanges(trf_df)
 
-        if nearest_df.empty:
-            continue
+    # Annotate with the closest locus
+    nearest_pr = strling_pr.nearest(trf_pr)
+    nearest_df = nearest_pr.df
 
-        # Remove pacbio variants more than slop bp away
-        nearest_columns = ['Start_b', 'End_b', 'repeatunit_norm_b', 'period', 'length_ru', 'length_bp', 'indel', 'sample_b', 'Distance']
-        nearest_df.loc[nearest_df.Distance > slop, nearest_columns] = None
+    if nearest_df.empty:
+        return
 
-        # Create a unique index
-        strling_df['locus'] = strling_df['Chromosome'] + '-' + strling_df['Start'].astype(str
-            ) + '-' + strling_df['End'].astype(str) + '-' + strling_df['repeatunit']
-        strling_df.set_index('locus', inplace = True)
-        nearest_df['locus'] = nearest_df['Chromosome'].astype(str) + '-' + nearest_df['Start'
-            ].astype(str) + '-' + nearest_df['End'].astype(str) + '-' + nearest_df['repeatunit']
-        nearest_df.set_index('locus', inplace = True)
+    # Remove pacbio variants more than slop bp away
+    nearest_columns = ['Start_b', 'End_b', 'repeatunit_norm_b', 'period', 'length_ru', 'length_bp', 'indel', 'sample_b', 'Distance']
+    nearest_df.loc[nearest_df.Distance > slop, nearest_columns] = None
 
-        nearest_df = nearest_df.filter(['repeatunit_norm_b', 'indel', 'Distance'])
-        nearest_df.rename(columns={'repeatunit_norm_b': f'repeatunit_hap{i}',
-                                    'indel': f'indel_hap{i}',
-                                    'Distance': f'Distance_hap{i}'}, inplace = True)
-        strling_df = strling_df.merge(nearest_df, how = 'left', left_index = True,
-                                        right_index = True)
+    # Create a unique index
+    strling_df['locus'] = strling_df['Chromosome'] + '-' + strling_df['Start'].astype(str
+        ) + '-' + strling_df['End'].astype(str) + '-' + strling_df['repeatunit']
+    strling_df.set_index('locus', inplace = True)
+    nearest_df['locus'] = nearest_df['Chromosome'].astype(str) + '-' + nearest_df['Start'
+        ].astype(str) + '-' + nearest_df['End'].astype(str) + '-' + nearest_df['repeatunit']
+    nearest_df.set_index('locus', inplace = True)
+
+    nearest_df = nearest_df.filter(['repeatunit_norm_b', 'indel', 'Distance'])
+    nearest_df.rename(columns={'repeatunit_norm_b': f'repeatunit_hap',
+                                'indel': f'indel_hap',
+                                'Distance': f'Distance_hap'}, inplace = True)
+    strling_df = strling_df.merge(nearest_df, how = 'left', left_index = True,
+                                    right_index = True)
 
     return strling_df
 
-def match_variants(strling_df, trf_hap1_df, trf_hap2_df, slop):
+def match_variants(strling_df, trf_hap1_df, slop):
     """Match up pacbio trf variants to their corresponding strling variants
         - Within X bp of slop
         - Same repeat unit
@@ -106,59 +104,58 @@ def match_variants(strling_df, trf_hap1_df, trf_hap2_df, slop):
 
     strling_df['repeatunit_norm'] = strling_df['repeatunit'].apply(normalise_str)
     trf_hap1_df['repeatunit_norm'] = trf_hap1_df['repeatunit'].apply(normalise_str)
-    trf_hap2_df['repeatunit_norm'] = trf_hap2_df['repeatunit'].apply(normalise_str)
 
     # Break down by repeat unit before comparing
     all_closest_df = pd.DataFrame()
     for this_ru in set(strling_df['repeatunit_norm']):
-        all_closest_df = all_closest_df.append(match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_ru, slop))
+        all_closest_df = all_closest_df.append(match_closest(strling_df, trf_hap1_df, this_ru, slop))
     
     return all_closest_df
 
-def annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr):
+def annotate_cov(strling_df, hap_pr):
     """Annotate strling calls with contig coverage overlap"""
     strling_pr = pr.PyRanges(strling_df)
 
-    for i, hap_pr in zip((1,2), (cov_hap1_pr, cov_hap2_pr)):
-        cov_pr = strling_pr.coverage(hap_pr)
-        cov_df = cov_pr.df
+    cov_pr = strling_pr.coverage(hap_pr)
+    cov_df = cov_pr.df
 
-        # If FractionOverlaps < 1, set NumberOverlaps to 0 
-        cov_df.loc[cov_df.FractionOverlaps < 1, 'NumberOverlaps'] = 0
+    # If FractionOverlaps < 1, set NumberOverlaps to 0
+    cov_df.loc[cov_df.FractionOverlaps < 1, 'NumberOverlaps'] = 0
 
-       # Create a unique index
-        cov_df['locus'] = cov_df['Chromosome'].astype(str) + '-' + cov_df['Start'
-            ].astype(str) + '-' + cov_df['End'].astype(str) + '-' + cov_df['repeatunit']
-        cov_df.set_index('locus', inplace = True)
+    # Create a unique index
+    strling_df['locus'] = strling_df['Chromosome'] + '-' + strling_df['Start'].astype(str
+        ) + '-' + strling_df['End'].astype(str) + '-' + strling_df['repeatunit']
+    strling_df.set_index('locus', inplace = True)
+    cov_df['locus'] = cov_df['Chromosome'].astype(str) + '-' + cov_df['Start'
+        ].astype(str) + '-' + cov_df['End'].astype(str) + '-' + cov_df['repeatunit']
+    cov_df.set_index('locus', inplace = True)
 
-        cov_df = cov_df.filter(['NumberOverlaps'])
-        cov_df.rename(columns={'NumberOverlaps': f'Hap{i}Cov'}, inplace = True)
-        strling_df = strling_df.merge(cov_df, how = 'left', left_index = True,
+    cov_df = cov_df.filter(['NumberOverlaps'])
+
+    cov_df.rename(columns={'NumberOverlaps': f'HapCov'}, inplace = True)
+    strling_df = strling_df.merge(cov_df, how = 'left', left_index = True,
                                         right_index = True)
-
     return(strling_df)
 
 def main():
     args = parse_args()
-    if len(args.trf) != 2:
-        exit(f'ERROR: Expected 2 trf files, got {len(args.trf)}: {args.trf}')
-    if len(args.cov) != 2:
-        exit(f'ERROR: Expected 2 cov files, got {len(args.cov)}: {args.cov}')
 
     # Parse inputs as pandas data frame (df) or pyranges (pr) objects
-    strling_df = parse_bed(args.strling)
+    strling_df = pd.read_csv(args.strling, sep='\t')
+    strling_df = strling_df.rename(columns={'chrom': 'Chromosome',
+                    'left': 'Start', 'right': 'End'})
+    # +1 end of any regions of length 0 (Start == End)
+    strling_df.loc[strling_df['Start'] == strling_df['End'], 'End'] += 1
 
-    trf_hap1_df = parse_bed(args.trf[0])
-    trf_hap2_df = parse_bed(args.trf[1])
+    trf_df = parse_bed(args.trf)
 
-    cov_hap1_pr = pr.read_bed(args.cov[0])
-    cov_hap2_pr = pr.read_bed(args.cov[1])
+    cov_pr = pr.read_bed(args.cov)
 
     # Annotate strling calls with corresponding PacBio calls
-    strling_df = match_variants(strling_df, trf_hap1_df, trf_hap2_df, args.slop)
+    strling_df = match_variants(strling_df, trf_df, args.slop)
 
     # Annotate strling calls with coverage overlap
-    strling_df = annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr)
+    strling_df = annotate_cov(strling_df, cov_pr)
 
     strling_df.to_csv(args.out, sep='\t', index=False)
 
