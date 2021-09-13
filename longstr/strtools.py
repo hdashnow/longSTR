@@ -1,4 +1,5 @@
 from Bio.Seq import Seq
+#from Bio.Alphabet import generic_dna
 
 def circular_permuted(x):
     """
