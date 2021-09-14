@@ -15,11 +15,11 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--strling', type=str,
-                        help='STRling variants')
+                        help='STRling outlier tsv file for one sample')
     parser.add_argument('--trf', type=str, nargs='+',
-                        help='STR variants from TRF in bed format (two, one for each haplotype)')
+                        help='STR variants from TRF in bed format (two, one for each haplotype or primary and associate contigs)')
     parser.add_argument('--cov', type=str, nargs='+',
-                        help='Contig coverage in bed format (two, one for each haplotype)')
+                        help='Contig coverage in bed format (two, one for each haplotype or primary and associate contigs)')
     parser.add_argument('--slop', type=int, default=500,
                         help='Consider variants the same if they are this distance apart (and have the same repeat unit)')
     parser.add_argument('--out', type=str, default = '',
@@ -54,7 +54,7 @@ def parse_bed(filename):
 
     return(df)
 
-def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, slop=200):
+def match_closest(strling_df, trf_hap1_df, trf_hap2_df, this_repeatunit, slop=500):
     """Filter to a specific repeat unit then annotate with the closest locus"""
     strling_df = strling_df.loc[strling_df['repeatunit_norm'] == this_repeatunit].copy()
 
@@ -146,7 +146,12 @@ def main():
         exit(f'ERROR: Expected 2 cov files, got {len(args.cov)}: {args.cov}')
 
     # Parse inputs as pandas data frame (df) or pyranges (pr) objects
-    strling_df = parse_bed(args.strling)
+    strling_df = pd.read_csv(args.strling, sep='\t')
+    strling_df = strling_df.rename(columns={'chrom': 'Chromosome',
+                    'left': 'Start', 'right': 'End'})
+    # +1 end of any regions of length 0 (Start == End) to avoid pyranges error
+    strling_df.loc[strling_df['Start'] == strling_df['End'], 'End'] += 1
+
 
     trf_hap1_df = parse_bed(args.trf[0])
     trf_hap2_df = parse_bed(args.trf[1])
