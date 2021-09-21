@@ -20,6 +20,9 @@ def parse_args():
                         help='STR variants from TRF in bed format (two, one for each haplotype or primary and associate contigs)')
     parser.add_argument('--cov', type=str, nargs='+',
                         help='Contig coverage in bed format (two, one for each haplotype or primary and associate contigs)')
+    parser.add_argument('--centromeres', type=str, help='Optional bed file of centromeres to annotate')
+    parser.add_argument('--telomeres', type=str, help='Optional bed file of telomeres to anotate')
+    parser.add_argument('--LCRs', type=str, help='Optional bed file of Low copy repeats to anotate')
     parser.add_argument('--slop', type=int, default=500,
                         help='Consider variants the same if they are this distance apart (and have the same repeat unit)')
     parser.add_argument('--out', type=str, default = '',
@@ -135,6 +138,28 @@ def annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr):
         cov_df.rename(columns={'NumberOverlaps': f'Hap{i}Cov'}, inplace = True)
         strling_df = strling_df.merge(cov_df, how = 'left', left_index = True,
                                         right_index = True)
+        strling_df[f'Hap{i}Cov'] = strling_df[f'Hap{i}Cov'].fillna(0)
+
+    return(strling_df)
+
+def annotate_feature_cov(strling_df, bed, feature):
+    """Annotate strling calls with if they overlap a feature"""
+    strling_pr = pr.PyRanges(strling_df)
+    bed_pr = pr.readers.read_bed(bed)
+
+    cov_pr = strling_pr.coverage(bed_pr)
+    cov_df = cov_pr.df
+
+    # Create a unique index
+    cov_df['locus'] = cov_df['Chromosome'].astype(str) + '-' + cov_df['Start'
+        ].astype(str) + '-' + cov_df['End'].astype(str) + '-' + cov_df['repeatunit']
+    cov_df.set_index('locus', inplace = True)
+
+    cov_df = cov_df.filter(['NumberOverlaps'])
+    cov_df.rename(columns={'NumberOverlaps': f'{feature}Cov'}, inplace = True)
+    strling_df = strling_df.merge(cov_df, how = 'left', left_index = True,
+                                    right_index = True)
+    strling_df[f'{feature}Cov'] = strling_df[f'{feature}Cov'].fillna(0)
 
     return(strling_df)
 
@@ -164,6 +189,14 @@ def main():
 
     # Annotate strling calls with coverage overlap
     strling_df = annotate_cov(strling_df, cov_hap1_pr, cov_hap2_pr)
+
+    # Annotate with additional stuff if requested
+    if args.centromeres:
+        strling_df = annotate_feature_cov(strling_df, args.centromeres, 'centromere')
+    if args.telomeres:
+        strling_df = annotate_feature_cov(strling_df, args.telomeres, 'telomere')
+    if args.LCRs:
+        strling_df = annotate_feature_cov(strling_df, args.LCRs, 'LCR')
 
     strling_df.to_csv(args.out, sep='\t', index=False)
 
