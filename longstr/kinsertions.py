@@ -12,7 +12,7 @@ def parse_args():
 
     parser.add_argument('VCF', type=str)
     parser.add_argument('OUT', type=str, default=sys.stdout,
-                            help='Output tsv filename')
+                            help='Output bed filename')
     parser.add_argument('--min_allele', type=int, default=10,
                             help='Minimum insertion size to check (default: %(default)s)',)
 
@@ -40,7 +40,7 @@ def count_kmers(s):
 def report_kmers(vcffile, outname, min_allele_len = 10):
 
     with open(outname, 'w') as outfile:
-        header = ['chrom', 'start', 'end', 
+        header = ['#chrom', 'start', 'end',
                     'repeatunit', 'prop_repeat', 'ref', 'alt']
         outfile.write('\t'.join(header) + '\n')
         for variant in VCF(vcffile):
@@ -49,6 +49,8 @@ def report_kmers(vcffile, outname, min_allele_len = 10):
                     continue
                 # Get most frequest k-mer and the proption of the allele it covers
                 kmer, prop = kmers.kmer_freq(allele)
+                if kmer == '' or prop == 0.0:
+                    continue
                 # Report genomic coordinates of STR insertions
                 out_list = [variant.CHROM, variant.start, variant.end, 
                             kmer, prop, variant.REF, allele]
@@ -57,9 +59,6 @@ def report_kmers(vcffile, outname, min_allele_len = 10):
 
 def main():
     args = parse_args()
-
-    vcffile = '/uufs/chpc.utah.edu/common/HIPAA/u6026198/storage/git/longSTR/working/test.vcf'
-    outname = 'test-out.tsv'
 
     report_kmers(args.VCF, args.OUT, args.min_allele)
 
