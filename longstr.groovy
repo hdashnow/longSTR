@@ -60,16 +60,16 @@ cov = {
 call_variants = {
     from('cram') transform('vcf') {
         exec """
-            bcftools mpileup -f $REF $input.cram | bioawk -Hc vcf '(length($alt)-length($ref))>=10' > $output.vcf
+            bcftools mpileup --min-ireads 1 -f $REF $input.cram | bioawk -Hc vcf '(length($alt)-length($ref))>=10' > $output.vcf
         """
     }
 }
 
 // Report most frequent kmer in all insertions >= 10 bp in a vcf
 count_kmers = {
-    from('vcf') transform('tsv') {
+    from('vcf') transform('bed') {
         exec """
-            $python $longstr/kinsertions.py $input.vcf $output.tsv
+            $python $longstr/kinsertions.py $input.vcf $output.bed
         """
     }
 }
