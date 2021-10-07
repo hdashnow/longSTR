@@ -71,6 +71,18 @@ def prop_str(S):
 
     return count * len(S['repeatunit']) / len(S['alt'])
 
+def count_str(S):
+    """Takes a pd Series with at least the indices 'alt' and 'repeatunit',
+        both strings. Return the number of occurances of repeatunit in alt"""
+
+    if S['alt'] is None:
+        return 0
+
+    count = S['alt'].count(S['repeatunit'])
+
+    return count
+
+
 def match_closest(strling_df, pacbio_hap1_df, pacbio_hap2_df, slop=500):
     """Annotate with the closest locus"""
 
@@ -104,13 +116,15 @@ def match_closest(strling_df, pacbio_hap1_df, pacbio_hap2_df, slop=500):
         nearest_df['locus'] = nearest_df['Chromosome'].astype(str) + '-' + nearest_df['Start'
             ].astype(str) + '-' + nearest_df['End'].astype(str) + '-' + nearest_df['repeatunit']
         nearest_df.set_index('locus', inplace = True)
+        nearest_df['strlingRUcount'] = nearest_df.apply(count_str, axis=1) #rows
         nearest_df['strlingRUprop'] = nearest_df.apply(prop_str, axis=1) #rows
 
         nearest_df = nearest_df.filter(['repeatunit_norm_b', 'prop_repeat', 
-                                        'Distance', 'strlingRUprop'])
+                                'Distance', 'strlingRUprop', 'strlingRUcount'])
         nearest_df.rename(columns={'repeatunit_norm_b': f'repeatunit_hap{i}',
                                     'prop_repeat': f'prop_repeat_hap{i}',
                                     'strlingRUprop': f'strlingRUprop_hap{i}',
+                                    'strlingRUcount': f'strlingRUcount_hap{i}',
                                     'Distance': f'Distance_hap{i}'}, inplace = True)
         strling_df = strling_df.merge(nearest_df, how = 'left', left_index = True,
                                         right_index = True)
