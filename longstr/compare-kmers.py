@@ -82,6 +82,17 @@ def count_str(S):
 
     return count
 
+def count_indel(S):
+    """Takes a pd Series with at least the indices 'alt' and 'ref',
+        both strings. Return len(alt) - len(ref)"""
+
+    if S['alt'] is None:
+        return 0
+
+    indel = len(S['alt']) - len(S['ref'])
+
+    return indel
+
 
 def match_closest(strling_df, pacbio_hap1_df, pacbio_hap2_df, slop=500):
     """Annotate with the closest locus"""
@@ -118,14 +129,17 @@ def match_closest(strling_df, pacbio_hap1_df, pacbio_hap2_df, slop=500):
         nearest_df.set_index('locus', inplace = True)
         nearest_df['strlingRUcount'] = nearest_df.apply(count_str, axis=1) #rows
         nearest_df['strlingRUprop'] = nearest_df.apply(prop_str, axis=1) #rows
+        nearest_df['indel'] = nearest_df.apply(count_indel, axis=1) #rows
 
         nearest_df = nearest_df.filter(['repeatunit_norm_b', 'prop_repeat', 
-                                'Distance', 'strlingRUprop', 'strlingRUcount'])
+                                'Distance', 'strlingRUprop', 'strlingRUcount', 'indel'])
         nearest_df.rename(columns={'repeatunit_norm_b': f'repeatunit_hap{i}',
                                     'prop_repeat': f'prop_repeat_hap{i}',
                                     'strlingRUprop': f'strlingRUprop_hap{i}',
                                     'strlingRUcount': f'strlingRUcount_hap{i}',
-                                    'Distance': f'Distance_hap{i}'}, inplace = True)
+                                    'Distance': f'Distance_hap{i}',
+                                    'indel': f'indel_hap{i}',
+                                    }, inplace = True)
         strling_df = strling_df.merge(nearest_df, how = 'left', left_index = True,
                                         right_index = True)
 
